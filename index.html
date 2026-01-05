@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MEP Planning & Monitoring App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    input, select, button { margin: 5px; padding: 6px; }
+    .card { border: 1px solid #aaa; padding: 15px; margin-bottom: 20px; }
+  </style>
+</head>
+
+<body>
+
+<h2>MEP Planning & Monitoring App</h2>
+
+<!-- ================= ACTIVITY INPUT ================= -->
+<div class="card">
+  <h3>Add Activity</h3>
+  <input id="id" placeholder="Activity ID">
+  <input id="name" placeholder="Activity Name">
+  <input id="duration" type="number" placeholder="Duration (days)">
+  <input id="manpower" type="number" placeholder="Manpower">
+  <select id="linkType">
+    <option value="FS">Finish–Start (FS)</option>
+    <option value="SS">Start–Start (SS)</option>
+  </select>
+  <button onclick="addActivity()">Add</button>
+</div>
+
+<!-- ================= GANTT ================= -->
+<div class="card">
+  <h3>Gantt Chart</h3>
+  <canvas id="ganttChart"></canvas>
+</div>
+
+<!-- ================= RESOURCE ================= -->
+<div class="card">
+  <h3>Manpower Histogram</h3>
+  <canvas id="resourceChart"></canvas>
+</div>
+
+<!-- ================= DPR ================= -->
+<div class="card">
+  <h3>Daily Progress (%)</h3>
+  <input id="progress" type="number">
+  <button onclick="updateProgress()">Update</button>
+  <canvas id="dprChart"></canvas>
+</div>
+
+<!-- ================= S CURVE ================= -->
+<div class="card">
+  <h3>S-Curve (Planned vs Actual)</h3>
+  <canvas id="sCurve"></canvas>
+</div>
+
+<button onclick="exportExcel()">Export Excel</button>
+
+<script>
+let activities = [];
+let dailyProgress = [];
+let ganttChart, resourceChart, dprChart, sCurve;
+
+function addActivity(){
+  const id = idEl.value;
+  const name = nameEl.value;
+  const duration = +durationEl.value;
+  const manpower = +manpowerEl.value;
+  const link = linkType.value;
+
+  let start = 0;
+  if(activities.length){
+    let p = activities[activities.length-1];
+    start = link==="FS" ? p.start_day+p.duration : p.start_day;
+  }
+
+  activities.push({
+    activity_id:id,
+    activity_name:name,
+    system:"HVAC",
+    duration,
+    start_day:start,
+    manpower,
+    planned_qty:100,
+    actual_qty:0
+  });
+
+  renderAll();
+}
+
+function renderAll(){
+  renderGantt();
+  renderResource();
+  renderSCurve();
+}
+
+function renderGantt(){
+  if(ganttChart) ganttChart.destroy();
+  ganttChart = new Chart(ganttChartEl,{
+    type:"bar",
+    data:{
+      labels:activities.map(a=>a.activity_name),
+      datasets:[{label:"Duration",data:activities.map(a=>a.duration)}]
+    },
+    options:{indexAxis:"y"}
+  });
+}
+
+function renderResource(){
+  if(resourceChart) resourceChart.destroy();
+  resourceChart = new Chart(resourceChartEl,{
+    type:"bar",
+    data:{
+      labels:activities.map(a=>a.activity_name),
+      datasets:[{label:"Manpower",data:activities.map(a=>a.manpower)}]
+    }
+  });
+}
+
+function updateProgress(){
+  dailyProgress.push(+progress.value);
+  renderDPR();
+  renderSCurve();
+}
+
+function renderDPR(){
+  if(dprChart) dprChart.destroy();
+  dprChart = new Chart(dprChartEl,{
+    type:"line",
+    data:{
+      labels:dailyProgress.map((_,i)=>`Day ${i+1}`),
+      datasets:[{label:"Daily %",data:dailyProgress}]
+    }
+  });
+}
+
+function renderSCurve(){
+  if(sCurve) sCurve.destroy();
+  let planned = dailyProgress.map((_,i)=>(i+1)*10);
+  sCurve = new Chart(sCurveEl,{
+    type:"line",
+    data:{
+      labels:planned.map((_,i)=>`Day ${i+1}`),
+      datasets:[
+        {label:"Planned",data:planned},
+        {label:"Actual",data:dailyProgress}
+      ]
+    }
+  });
+}
+
+function exportExcel(){
+  fetch("/export/excel",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({activities})
+  }).then(()=>alert("Excel Exported"));
+}
+
+const idEl=id, nameEl=name, durationEl=duration,
+manpowerEl=manpower, ganttChartEl=ganttChart,
+resourceChartEl=resourceChart, dprChartEl=dprChart,
+sCurveEl=sCurve;
+</script>
+
+</body>
+</html>
